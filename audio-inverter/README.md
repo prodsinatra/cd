@@ -96,6 +96,11 @@ fingerprinting feature:
   - `normal` — **default**; applies all four transforms moderately
   - `high` — all four pushed harder, for the most fingerprint divergence
 - `--seed N` makes the result reproducible; omit it for a unique file each run.
+- `--metadata` *also* makes the file unique at the **tag** level: a random id
+  is embedded in the comment/software fields, so two outputs differ in their
+  metadata as well as their audio. Existing tags are preserved unless you add
+  `--no-preserve-tags`. (The same `--seed` reproduces the same id.) Useful
+  against dedup that keys on metadata rather than the waveform.
 - `--list-formats` prints the formats your libsndfile build supports.
 
 Formats depend on your libsndfile build — typically **WAV, FLAC, OGG, AIFF,
@@ -104,7 +109,15 @@ MP3** and others. **AAC/M4A need ffmpeg and are not handled here.**
 ```bash
 $ python uniquify_audio.py track.mp3            # unique MP3 every run
 wrote unique audio to track.unique.mp3
+
+$ python uniquify_audio.py track.mp3 --metadata # unique audio AND tags
+wrote unique audio to track.unique.mp3
 ```
+
+> Note: by default (without `--metadata`) only the audio data is changed, and
+> libsndfile does not copy the source's tags — so plain runs come out with
+> empty metadata. Use `--metadata` when you want tag-level uniqueness and tag
+> preservation.
 
 Requires `soundfile` and `numpy`:
 

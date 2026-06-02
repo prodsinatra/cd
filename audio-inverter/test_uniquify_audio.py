@@ -25,6 +25,7 @@ from uniquify_audio import (
     perturb,
     uniquify_audio_file,
     default_output_path,
+    build_metadata,
     PRESETS,
 )
 
@@ -126,6 +127,44 @@ def test_seeded_file_is_reproducible_on_disk():
     print("ok: a fixed seed reproduces a byte-identical file on disk")
 
 
+def test_build_metadata_is_unique_and_preserves():
+    src = {"software": "Lavf60", "artist": "someone"}
+    a = build_metadata(src, np.random.default_rng(1), preserve=True)
+    b = build_metadata(src, np.random.default_rng(2), preserve=True)
+    # A fresh, distinct id lands in the comment each call.
+    assert a["comment"].startswith("uniquify-id:")
+    assert a["comment"] != b["comment"], "ids should differ between calls"
+    # Existing tags are preserved when asked.
+    assert a["artist"] == "someone"
+    # Dropping tags keeps only the injected fields.
+    c = build_metadata(src, np.random.default_rng(3), preserve=False)
+    assert "artist" not in c and c["comment"].startswith("uniquify-id:")
+    print("ok: build_metadata injects a unique id and honours preserve flag")
+
+
+def test_metadata_written_to_file_and_seed_reproduces():
+    data, rate = _tone()
+    with tempfile.TemporaryDirectory() as tmp:
+        src = os.path.join(tmp, "in.wav")
+        _write(src, data, rate, fmt="WAV")
+        a = os.path.join(tmp, "a.wav")
+        b = os.path.join(tmp, "b.wav")
+        # Two seedless runs get different embedded ids.
+        uniquify_audio_file(src, a, metadata=True)
+        uniquify_audio_file(src, b, metadata=True)
+        ca = sf.SoundFile(a).copy_metadata().get("comment", "")
+        cb = sf.SoundFile(b).copy_metadata().get("comment", "")
+        assert ca.startswith("uniquify-id:") and ca != cb
+        # A fixed seed reproduces the same id.
+        s1 = os.path.join(tmp, "s1.wav")
+        s2 = os.path.join(tmp, "s2.wav")
+        uniquify_audio_file(src, s1, seed=7, metadata=True)
+        uniquify_audio_file(src, s2, seed=7, metadata=True)
+        assert (sf.SoundFile(s1).copy_metadata()["comment"]
+                == sf.SoundFile(s2).copy_metadata()["comment"])
+    print("ok: --metadata embeds a unique id per run; seed reproduces it")
+
+
 def test_default_output_path_keeps_extension():
     assert default_output_path("song.mp3") == "song.unique.mp3"
     assert default_output_path("a/b/clip.flac") == os.path.join("a", "b", "clip.unique.flac")
@@ -139,5 +178,7 @@ if __name__ == "__main__":
     test_seed_reproducible_and_diverges()
     test_roundtrip_unique_hash_per_format()
     test_seeded_file_is_reproducible_on_disk()
+    test_build_metadata_is_unique_and_preserves()
+    test_metadata_written_to_file_and_seed_reproduces()
     test_default_output_path_keeps_extension()
     print("\nall tests passed")
