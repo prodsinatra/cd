@@ -165,6 +165,24 @@ def test_metadata_written_to_file_and_seed_reproduces():
     print("ok: --metadata embeds a unique id per run; seed reproduces it")
 
 
+def test_metadata_on_by_default_and_opt_out():
+    data, rate = _tone()
+    with tempfile.TemporaryDirectory() as tmp:
+        src = os.path.join(tmp, "in.wav")
+        _write(src, data, rate, fmt="WAV")
+        # Default call (no metadata arg) should embed an id.
+        on = os.path.join(tmp, "on.wav")
+        uniquify_audio_file(src, on)
+        assert sf.SoundFile(on).copy_metadata().get("comment", "").startswith(
+            "uniquify-id:"), "metadata should be embedded by default"
+        # Opting out leaves no injected id.
+        off = os.path.join(tmp, "off.wav")
+        uniquify_audio_file(src, off, metadata=False)
+        assert not sf.SoundFile(off).copy_metadata().get("comment", "").startswith(
+            "uniquify-id:"), "metadata=False should not embed an id"
+    print("ok: metadata is on by default and can be turned off")
+
+
 def test_default_output_path_keeps_extension():
     assert default_output_path("song.mp3") == "song.unique.mp3"
     assert default_output_path("a/b/clip.flac") == os.path.join("a", "b", "clip.unique.flac")
@@ -180,5 +198,6 @@ if __name__ == "__main__":
     test_seeded_file_is_reproducible_on_disk()
     test_build_metadata_is_unique_and_preserves()
     test_metadata_written_to_file_and_seed_reproduces()
+    test_metadata_on_by_default_and_opt_out()
     test_default_output_path_keeps_extension()
     print("\nall tests passed")

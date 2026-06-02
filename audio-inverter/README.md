@@ -96,28 +96,28 @@ fingerprinting feature:
   - `normal` — **default**; applies all four transforms moderately
   - `high` — all four pushed harder, for the most fingerprint divergence
 - `--seed N` makes the result reproducible; omit it for a unique file each run.
-- `--metadata` *also* makes the file unique at the **tag** level: a random id
-  is embedded in the comment/software fields, so two outputs differ in their
-  metadata as well as their audio. Existing tags are preserved unless you add
-  `--no-preserve-tags`. (The same `--seed` reproduces the same id.) Useful
-  against dedup that keys on metadata rather than the waveform.
+- **Metadata uniqueness is on by default**: a random id is embedded in the
+  comment/software fields, so two outputs differ in their **tags** as well as
+  their audio, and the source's existing tags are preserved. (The same
+  `--seed` reproduces the same id.)
+  - `--no-metadata` changes only the audio data and leaves tags untouched.
+  - `--no-preserve-tags` keeps the unique id but drops the source's tags.
 - `--list-formats` prints the formats your libsndfile build supports.
 
 Formats depend on your libsndfile build — typically **WAV, FLAC, OGG, AIFF,
 MP3** and others. **AAC/M4A need ffmpeg and are not handled here.**
 
 ```bash
-$ python uniquify_audio.py track.mp3            # unique MP3 every run
+$ python uniquify_audio.py track.mp3              # unique audio + tags (default)
 wrote unique audio to track.unique.mp3
 
-$ python uniquify_audio.py track.mp3 --metadata # unique audio AND tags
+$ python uniquify_audio.py track.mp3 --no-metadata  # change audio data only
 wrote unique audio to track.unique.mp3
 ```
 
-> Note: by default (without `--metadata`) only the audio data is changed, and
-> libsndfile does not copy the source's tags — so plain runs come out with
-> empty metadata. Use `--metadata` when you want tag-level uniqueness and tag
-> preservation.
+> Note: with `--no-metadata`, libsndfile does not copy the source's tags, so
+> the output comes out with empty metadata. The default keeps tags and adds a
+> unique id.
 
 Requires `soundfile` and `numpy`:
 
