@@ -41,30 +41,41 @@ def _write(path, data, rate, fmt=None, subtype=None):
 def test_perturb_changes_but_stays_close():
     data, rate = _tone()
     rng = np.random.default_rng(0)
-    out = perturb(data, rate, rng, PRESETS["light"], "PCM_16")
-    # Light preset adds no pad, so lengths match and the shift is tiny.
+    out = perturb(data, rate, rng, PRESETS["subtle"], "PCM_16")
+    # Subtle preset adds no pad, so lengths match and the shift is tiny.
     assert out.shape == data.shape
     assert not np.array_equal(out, data)
-    # Inaudible: light preset stays within a few quantisation steps.
+    # Inaudible: subtle preset stays within a few quantisation steps.
     step = 1.0 / (1 << 15)
     assert np.max(np.abs(out - data)) < 5 * step
-    print("ok: light perturbation changes data but stays near-inaudible")
+    print("ok: subtle perturbation changes data but stays near-inaudible")
 
 
-def test_strong_adds_leading_pad():
+def test_normal_and_high_add_leading_pad():
     data, rate = _tone()
-    rng = np.random.default_rng(1)
-    out = perturb(data, rate, rng, PRESETS["strong"], "PCM_16")
-    assert out.shape[0] > data.shape[0], "strong preset should prepend frames"
-    print("ok: strong preset shifts time alignment with a leading pad")
+    for preset in ("normal", "high"):
+        out = perturb(data, rate, np.random.default_rng(1), PRESETS[preset], "PCM_16")
+        assert out.shape[0] > data.shape[0], f"{preset} preset should prepend frames"
+    print("ok: normal/high presets shift time alignment with a leading pad")
+
+
+def test_presets_increase_in_strength():
+    # Each step up should allow a larger maximum per-sample change.
+    assert (PRESETS["subtle"]["dither_steps"]
+            < PRESETS["normal"]["dither_steps"]
+            < PRESETS["high"]["dither_steps"])
+    assert (PRESETS["subtle"]["pad_ms_max"]
+            <= PRESETS["normal"]["pad_ms_max"]
+            < PRESETS["high"]["pad_ms_max"])
+    print("ok: subtle < normal < high in perturbation strength")
 
 
 def test_seed_reproducible_and_diverges():
     data, rate = _tone()
-    a = perturb(data, rate, np.random.default_rng(42), PRESETS["strong"], "PCM_16")
-    b = perturb(data, rate, np.random.default_rng(42), PRESETS["strong"], "PCM_16")
+    a = perturb(data, rate, np.random.default_rng(42), PRESETS["normal"], "PCM_16")
+    b = perturb(data, rate, np.random.default_rng(42), PRESETS["normal"], "PCM_16")
     assert np.array_equal(a, b), "same seed should reproduce identical output"
-    c = perturb(data, rate, np.random.default_rng(43), PRESETS["strong"], "PCM_16")
+    c = perturb(data, rate, np.random.default_rng(43), PRESETS["normal"], "PCM_16")
     assert not (a.shape == c.shape and np.array_equal(a, c))
     print("ok: seed reproducible; different seeds diverge")
 
@@ -92,7 +103,7 @@ def test_roundtrip_unique_hash_per_format():
             hashes = set()
             for i in range(3):
                 dst = os.path.join(tmp, f"out{i}{ext}")
-                uniquify_audio_file(src, dst, seed=None, strength="strong")
+                uniquify_audio_file(src, dst, seed=None, strength="normal")
                 with open(dst, "rb") as fh:
                     hashes.add(hashlib.sha256(fh.read()).hexdigest())
             assert len(hashes) == 3, f"{fmt}: outputs collided"
@@ -108,8 +119,8 @@ def test_seeded_file_is_reproducible_on_disk():
         _write(src, data, rate, fmt="WAV")
         a = os.path.join(tmp, "a.wav")
         b = os.path.join(tmp, "b.wav")
-        uniquify_audio_file(src, a, seed=123, strength="strong")
-        uniquify_audio_file(src, b, seed=123, strength="strong")
+        uniquify_audio_file(src, a, seed=123, strength="normal")
+        uniquify_audio_file(src, b, seed=123, strength="normal")
         with open(a, "rb") as fa, open(b, "rb") as fb:
             assert fa.read() == fb.read(), "seeded output should be byte-identical"
     print("ok: a fixed seed reproduces a byte-identical file on disk")
@@ -123,7 +134,8 @@ def test_default_output_path_keeps_extension():
 
 if __name__ == "__main__":
     test_perturb_changes_but_stays_close()
-    test_strong_adds_leading_pad()
+    test_normal_and_high_add_leading_pad()
+    test_presets_increase_in_strength()
     test_seed_reproducible_and_diverges()
     test_roundtrip_unique_hash_per_format()
     test_seeded_file_is_reproducible_on_disk()

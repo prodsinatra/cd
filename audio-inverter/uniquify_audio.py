@@ -22,15 +22,16 @@ fingerprinting feature:
                            which is what most audio fingerprinters key on
 
 A ``--seed`` makes all of this reproducible; omit it for a unique file each
-run. ``--strength`` selects a preset (``light`` ≈ the stdlib behaviour,
-``strong`` is the default here).
+run. ``--strength`` selects a preset: ``subtle`` (≈ the stdlib LSB-only
+behaviour), ``normal`` (the default), or ``high`` (most fingerprint
+divergence). All three stay below what a casual listener would notice.
 
 Formats: whatever your libsndfile build supports (run with --list-formats).
 AAC/M4A need ffmpeg and are not handled here.
 
 Usage:
     python uniquify_audio.py input.mp3 [output.mp3] [--seed N]
-                             [--strength light|strong] [--list-formats]
+                             [--strength subtle|normal|high] [--list-formats]
 
 If output is omitted the result is written next to the input as
 "<name>.unique<ext>", preserving the original format.
@@ -57,20 +58,29 @@ else:
 # one quantisation step is ~1/32768, so a few steps of dither and a sub-percent
 # gain change sit at or below the noise floor.
 PRESETS = {
-    # "light" mirrors the gentle, near-pure-LSB behaviour of uniquify.py.
-    "light": {
+    # "subtle" mirrors the gentle, near-pure-LSB behaviour of uniquify.py:
+    # the smallest possible change that still makes the file unique.
+    "subtle": {
         "dither_steps": 1.0,    # +/- this many quantisation steps of noise
         "gain_jitter": 0.0,     # fraction, e.g. 0.003 == 0.3%
         "offset_steps": 0.0,    # constant DC offset in quantisation steps
         "pad_ms_max": 0.0,      # up to this many ms of leading near-silence
     },
-    # "strong" layers several imperceptible shifts to move more fingerprint
-    # features while remaining inaudible.
-    "strong": {
+    # "normal" (the default) layers a few imperceptible shifts to move more
+    # fingerprint features while remaining inaudible.
+    "normal": {
         "dither_steps": 2.0,
         "gain_jitter": 0.003,
         "offset_steps": 0.5,
         "pad_ms_max": 8.0,
+    },
+    # "high" pushes each transform harder for the most fingerprint divergence,
+    # still well below what a casual listener would notice.
+    "high": {
+        "dither_steps": 4.0,
+        "gain_jitter": 0.008,
+        "offset_steps": 1.0,
+        "pad_ms_max": 25.0,
     },
 }
 
@@ -134,7 +144,7 @@ def uniquify_audio_file(
     input_path: str,
     output_path: str,
     seed: int | None = None,
-    strength: str = "strong",
+    strength: str = "normal",
 ) -> None:
     """Read any libsndfile-readable audio file, perturb it so it is unique,
     and write it back in the same format/subtype."""
@@ -144,7 +154,8 @@ def uniquify_audio_file(
             f"install them (pip install soundfile numpy). Original error: {_IMPORT_ERROR}"
         )
     if strength not in PRESETS:
-        raise ValueError(f"unknown strength: {strength!r} (choose light or strong)")
+        choices = ", ".join(sorted(PRESETS))
+        raise ValueError(f"unknown strength: {strength!r} (choose one of: {choices})")
 
     rng = np.random.default_rng(seed)  # seed=None -> OS entropy, unique each run
 
@@ -177,8 +188,8 @@ def main(argv: list[str] | None = None) -> int:
         help="seed for reproducible output (default: random each run)",
     )
     parser.add_argument(
-        "--strength", choices=sorted(PRESETS), default="strong",
-        help="perturbation preset (default: strong)",
+        "--strength", choices=sorted(PRESETS), default="normal",
+        help="perturbation preset: subtle, normal, or high (default: normal)",
     )
     parser.add_argument(
         "--list-formats", action="store_true",

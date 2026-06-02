@@ -77,7 +77,7 @@ content-ID / dedup matching while staying essentially inaudible.
 
 ```bash
 python uniquify_audio.py input.mp3 [output.mp3] [--seed N] \
-       [--strength light|strong] [--list-formats]
+       [--strength subtle|normal|high] [--list-formats]
 ```
 
 It layers several imperceptible transforms, each of which moves a different
@@ -90,8 +90,11 @@ fingerprinting feature:
 | sub-LSB DC offset    | nudges the whole waveform                        |
 | leading-silence pad  | time-alignment, which most fingerprinters key on |
 
-- `--strength strong` (default) applies all four; `light` ≈ the gentle,
-  WAV-tool behaviour (pure LSB dither, no pad).
+- `--strength` chooses how hard to push, all three staying below what a
+  casual listener would notice:
+  - `subtle` — pure LSB dither, no pad (≈ the gentle WAV-tool behaviour)
+  - `normal` — **default**; applies all four transforms moderately
+  - `high` — all four pushed harder, for the most fingerprint divergence
 - `--seed N` makes the result reproducible; omit it for a unique file each run.
 - `--list-formats` prints the formats your libsndfile build supports.
 
@@ -142,7 +145,8 @@ a unique hash, that samples at the format extremes stay in range, and that the
 WAV round-trip preserves params and length.
 
 `test_uniquify_audio.py` confirms the perturbation changes the data while
-staying near-inaudible, that the strong preset shifts time alignment, that a
+staying near-inaudible, that the normal/high presets shift time alignment and
+that the presets increase in strength (subtle < normal < high), that a
 seed is reproducible while different seeds diverge, that each run yields a
 unique file hash across every writable format, and that the output extension
 is preserved.
