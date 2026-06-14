@@ -2,3 +2,4 @@
 # The WAV tools (invert.py, uniquify.py) use the standard library only.
 soundfile>=0.12
 numpy>=1.22
+phonenumbers>=8.13
