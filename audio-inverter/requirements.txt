@@ -1,4 +1,4 @@
-# Only needed for uniquify_audio.py (multi-format MP3/FLAC/OGG/AIFF support).
+# Only needed for uniquify_audio.py and flip.py (multi-format MP3/FLAC/OGG/AIFF).
 # The WAV tools (invert.py, uniquify.py) use the standard library only.
 soundfile>=0.12
 numpy>=1.22
