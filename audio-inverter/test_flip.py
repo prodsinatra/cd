@@ -29,6 +29,7 @@ from flip import (
     widen,
     flip,
     flip_audio_file,
+    resolve_output_format,
     default_output_path,
     DEFAULTS,
 )
@@ -190,6 +191,39 @@ def test_file_roundtrip_and_default_name():
         _check("flip file was written", os.path.exists(out))
         data, sr = sf.read(out)
         _check("flipped file is readable audio", data.size > 0 and sr == rate)
+        _check("default WAV output is 24-bit PCM",
+               sf.info(out).subtype == "PCM_24")
+
+
+def test_default_output_is_wav_regardless_of_input():
+    # An MP3-named source should still default to a lossless .wav output name.
+    _check("mp3 input defaults to .flip.wav output",
+           default_output_path("/x/track.mp3").endswith("track.flip.wav"))
+    _check("flac input defaults to .flip.wav output",
+           default_output_path("/x/y.flac").endswith("y.flip.wav"))
+
+
+def test_resolve_output_format():
+    # WAV defaults to 24-bit; extension picks the container; subtype overrides.
+    _check("WAV defaults to PCM_24",
+           resolve_output_format("out.wav") == ("WAV", "PCM_24"))
+    _check("extension chooses FLAC container",
+           resolve_output_format("out.flac")[0] == "FLAC")
+    _check("explicit subtype is honoured",
+           resolve_output_format("out.wav", "PCM_16") == ("WAV", "PCM_16"))
+    _check("unknown extension falls back to WAV",
+           resolve_output_format("out.weird")[0] == "WAV")
+
+
+def test_explicit_wav_subtype_written():
+    x, rate = _tone(seconds=0.3, freq=440.0)
+    with tempfile.TemporaryDirectory() as d:
+        src = os.path.join(d, "s.wav")
+        sf.write(src, x, rate)
+        out = os.path.join(d, "s16.wav")
+        flip_audio_file(src, out, seed=1, subtype="PCM_16")
+        _check("explicit PCM_16 subtype is written",
+               sf.info(out).subtype == "PCM_16")
 
 
 def main():
@@ -205,6 +239,9 @@ def main():
     test_flip_stereo_shape_preserved()
     test_seed_reproducible_and_varies()
     test_file_roundtrip_and_default_name()
+    test_default_output_is_wav_regardless_of_input()
+    test_resolve_output_format()
+    test_explicit_wav_subtype_written()
 
     if _check.failed:
         print(f"\n{_check.failed} check(s) failed")

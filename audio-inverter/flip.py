@@ -27,16 +27,23 @@ A ``--seed`` makes the small per-run variation reproducible; omit it and every
 run is a slightly different flip. Defaults give a noticeable-but-recognisable
 flip (down a whole step, a touch slower, lightly filtered and saturated).
 
+Output defaults to **WAV** regardless of the input format. That is the
+higher-quality choice: the flip is computed in floating point, and writing it
+straight to lossless 24-bit WAV avoids a second lossy generation that you would
+get by re-encoding back to MP3. The output format follows the output file's
+extension, so pass e.g. ``out.flac`` for FLAC; ``--subtype`` overrides the
+sample format (default ``PCM_24`` for WAV).
+
 Formats: whatever your libsndfile build supports (run with --list-formats).
 AAC/M4A need ffmpeg and are not handled here.
 
 Usage:
-    python flip.py input.mp3 [output.mp3]
+    python flip.py input.mp3 [output.wav]
         [--semitones N] [--tempo F] [--highpass HZ] [--lowpass HZ]
-        [--drive F] [--width F] [--seed N] [--list-formats]
+        [--drive F] [--width F] [--subtype SUBTYPE] [--seed N] [--list-formats]
 
 If output is omitted the result is written next to the input as
-"<name>.flip<ext>", preserving the original format.
+"<name>.flip.wav".
 """
 
 from __future__ import annotations
@@ -236,6 +243,25 @@ def flip(samples, samplerate: int, params: dict, rng):
     return out
 
 
+def resolve_output_format(output_path: str, subtype: str | None = None):
+    """Pick a libsndfile (format, subtype) for ``output_path``.
+
+    The container format follows the output file's extension (WAV, FLAC, ...).
+    For the quality-preferred WAV default we use 24-bit PCM so the float flip is
+    not needlessly re-quantised to 16-bit; other formats use libsndfile's
+    default subtype. An explicit ``subtype`` always wins.
+    """
+    ext = os.path.splitext(output_path)[1].lstrip(".").upper()
+    available = sf.available_formats()
+    fmt = ext if ext in available else "WAV"
+    if subtype is None:
+        subtype = "PCM_24" if fmt == "WAV" else sf.default_subtype(fmt)
+    if not sf.check_format(fmt, subtype):
+        # Requested subtype not valid for this format; fall back to its default.
+        subtype = sf.default_subtype(fmt)
+    return fmt, subtype
+
+
 def flip_audio_file(
     input_path: str,
     output_path: str,
@@ -246,9 +272,13 @@ def flip_audio_file(
     lowpass: float | None = DEFAULTS["lowpass"],
     drive: float = DEFAULTS["drive"],
     width: float = DEFAULTS["width"],
+    subtype: str | None = None,
 ) -> None:
-    """Read any libsndfile-readable audio file, flip it, and write it back in
-    the same format/subtype."""
+    """Read any libsndfile-readable audio file, flip it, and write it out.
+
+    The output container format follows ``output_path``'s extension (default
+    WAV), independent of the input format, so an MP3 source flips to lossless
+    WAV by default rather than being re-encoded to lossy MP3."""
     if sf is None:
         raise RuntimeError(
             "soundfile and numpy are required; install them "
@@ -257,7 +287,6 @@ def flip_audio_file(
 
     rng = np.random.default_rng(seed)  # seed=None -> OS entropy, unique each run
     data, samplerate = sf.read(input_path, always_2d=False)
-    info = sf.info(input_path)
 
     params = {
         "semitones": semitones,
@@ -269,16 +298,19 @@ def flip_audio_file(
     }
     flipped = flip(data, samplerate, params, rng)
 
+    fmt, out_subtype = resolve_output_format(output_path, subtype)
     channels = 1 if flipped.ndim == 1 else flipped.shape[1]
     with sf.SoundFile(output_path, "w", samplerate=samplerate,
-                      channels=channels, format=info.format,
-                      subtype=info.subtype) as out:
+                      channels=channels, format=fmt,
+                      subtype=out_subtype) as out:
         out.write(flipped)
 
 
 def default_output_path(input_path: str) -> str:
-    root, ext = os.path.splitext(input_path)
-    return f"{root}.flip{ext or '.wav'}"
+    # Always WAV: the flip is float, and lossless WAV avoids a second lossy
+    # generation you'd get re-encoding back to a compressed source format.
+    root, _ = os.path.splitext(input_path)
+    return f"{root}.flip.wav"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -288,7 +320,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("input", nargs="?", help="path to the input audio file")
     parser.add_argument("output", nargs="?",
-                        help="path to write (default: <name>.flip<ext>)")
+                        help="path to write (default: <name>.flip.wav). The "
+                             "container format follows this file's extension.")
     parser.add_argument("--semitones", type=float, default=DEFAULTS["semitones"],
                         help=f"pitch shift in semitones (default: {DEFAULTS['semitones']})")
     parser.add_argument("--tempo", type=float, default=DEFAULTS["tempo"],
@@ -302,6 +335,9 @@ def main(argv: list[str] | None = None) -> int:
                         help="tanh saturation amount; 0 to disable")
     parser.add_argument("--width", type=float, default=DEFAULTS["width"],
                         help="stereo widening factor; 1.0 leaves width unchanged")
+    parser.add_argument("--subtype", default=None,
+                        help="output sample format, e.g. PCM_16, PCM_24, FLOAT "
+                             "(default: PCM_24 for WAV, else the format default)")
     parser.add_argument("--seed", type=int, default=None,
                         help="seed for reproducible per-run variation "
                              "(default: random each run)")
@@ -327,7 +363,7 @@ def main(argv: list[str] | None = None) -> int:
             args.input, output, seed=args.seed,
             semitones=args.semitones, tempo=args.tempo,
             highpass=args.highpass or None, lowpass=args.lowpass or None,
-            drive=args.drive, width=args.width,
+            drive=args.drive, width=args.width, subtype=args.subtype,
         )
     except (RuntimeError, ValueError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)

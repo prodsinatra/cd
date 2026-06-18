@@ -155,13 +155,17 @@ together and just sounds like a tape running fast). Pitch-shift and
 time-stretch use a phase vocoder; filtering is done in the FFT domain.
 
 ```bash
-python flip.py input.mp3 [output.mp3] \
+python flip.py input.mp3 [output.wav] \
        [--semitones N] [--tempo F] [--highpass HZ] [--lowpass HZ] \
-       [--drive F] [--width F] [--seed N] [--list-formats]
+       [--drive F] [--width F] [--subtype SUBTYPE] [--seed N] [--list-formats]
 ```
 
 If `output` is omitted the result is written next to the input as
-`<name>.flip<ext>`, preserving the original format.
+`<name>.flip.wav`. **Output defaults to WAV regardless of the input format**,
+because that is the higher-quality choice: the flip is computed in floating
+point and written straight to lossless 24-bit WAV, avoiding the second lossy
+generation you'd get by re-encoding back to MP3. The container format follows
+the output file's extension, so pass e.g. `out.flac` for FLAC.
 
 - `--semitones` — pitch shift in semitones (default `-2`, down a whole step).
 - `--tempo` — `>1` faster, `<1` slower, pitch preserved (default `0.97`).
@@ -169,6 +173,8 @@ If `output` is omitted the result is written next to the input as
   to disable either.
 - `--drive` — tanh saturation amount (default `0.8`; `0` disables).
 - `--width` — stereo widening factor (default `1.12`; `1.0` leaves it alone).
+- `--subtype` — output sample format, e.g. `PCM_16`, `PCM_24`, `FLOAT`
+  (default `PCM_24` for WAV, else the format's libsndfile default).
 - `--seed N` — reproducible per-run variation; omit it and every run is a
   slightly different flip (a few cents of detune and ~0.5% tempo wobble are
   applied so independent runs are never identical).
@@ -180,10 +186,10 @@ subtler one.
 
 ```bash
 $ python flip.py track.mp3                       # default noticeable flip
-wrote flipped audio to track.flip.mp3
+wrote flipped audio to track.flip.wav            # lossless 24-bit WAV
 
 $ python flip.py track.mp3 --semitones -5 --tempo 0.9 --lowpass 8000
-wrote flipped audio to track.flip.mp3            # heavier, darker flip
+wrote flipped audio to track.flip.wav            # heavier, darker flip
 ```
 
 Formats depend on your libsndfile build (run `--list-formats`) — typically
