@@ -15,8 +15,10 @@ from osint_engine.banner import format_banner
 from osint_engine.canary import detect_canary_touch
 from osint_engine.config import EngineConfig
 from osint_engine.extractors import (
+    detect_self_pii_leak,
     extract_fingerprint_signals,
     extract_ip_device_signals,
+    extract_pii_signals,
 )
 from osint_engine.firewall import (
     classify_research_intent,
@@ -39,6 +41,8 @@ class TriggerDecision:
     ip_device_info: Any
     fingerprint_signals: Any
     canary_hits: Any = None
+    pii_signals: Any = None
+    self_pii_leak: Any = None
     should_block_research: bool = False
     message: str = ""
     banner: str = ""
@@ -63,6 +67,16 @@ class TriggerEngine:
         ip_signals = extract_ip_device_signals(previous_results)
         fp_signals = extract_fingerprint_signals(previous_results)
         canary_hits = detect_canary_touch(f"{query} {context} {previous_results}")
+        pii_signals = extract_pii_signals(previous_results)
+        self_pii_leak = detect_self_pii_leak(previous_results, self.config)
+
+        signal_kwargs = dict(
+            ip_signals=ip_signals,
+            fp_signals=fp_signals,
+            canary_hits=canary_hits,
+            pii_signals=pii_signals,
+            self_pii_leak=self_pii_leak,
+        )
 
         # Stage 1: fast deterministic check.
         if is_clear_deep_profiling(query, context):
@@ -71,12 +85,10 @@ class TriggerEngine:
                 level="Level 2",
                 reason="Clear deep profiling indicators detected (Stage 1)",
                 intent="deep_profiling",
-                ip_signals=ip_signals,
-                fp_signals=fp_signals,
-                canary_hits=canary_hits,
                 tool=tool_name,
                 query=query,
                 audit_outcome="BLOCKED - Stage 1 deep profiling",
+                **signal_kwargs,
             )
             self._write_audit(decision, tool_name, query)
             return decision
@@ -94,12 +106,10 @@ class TriggerEngine:
                     level="Level 2",
                     reason="Intent classifier returned deep_profiling (Stage 2)",
                     intent="deep_profiling",
-                    ip_signals=ip_signals,
-                    fp_signals=fp_signals,
-                    canary_hits=canary_hits,
                     tool=tool_name,
                     query=query,
                     audit_outcome="BLOCKED - Stage 2 intent",
+                    **signal_kwargs,
                 )
                 self._write_audit(decision, tool_name, query)
                 return decision
@@ -107,11 +117,9 @@ class TriggerEngine:
             if intent == "borderline":
                 decision = self._allow_with_warning(
                     timestamp=timestamp,
-                    ip_signals=ip_signals,
-                    fp_signals=fp_signals,
-                    canary_hits=canary_hits,
                     tool=tool_name,
                     query=query,
+                    **signal_kwargs,
                 )
                 self._write_audit(decision, tool_name, query)
                 return decision
@@ -119,25 +127,22 @@ class TriggerEngine:
             # Light self-targeted lookup: allow, log as Level 1.
             decision = self._allow_self_light(
                 timestamp=timestamp,
-                ip_signals=ip_signals,
-                fp_signals=fp_signals,
-                canary_hits=canary_hits,
                 tool=tool_name,
                 query=query,
+                **signal_kwargs,
             )
             self._write_audit(decision, tool_name, query)
             return decision
 
-        # Non-self query: silent allow. Still log if canary hit fired.
+        # Non-self query path. Self-PII leak in results is high-signal even
+        # when the query itself looked benign.
         decision = self._allow_non_self(
             timestamp=timestamp,
-            ip_signals=ip_signals,
-            fp_signals=fp_signals,
-            canary_hits=canary_hits,
             tool=tool_name,
             query=query,
+            **signal_kwargs,
         )
-        if canary_hits:
+        if canary_hits or self_pii_leak:
             self._write_audit(decision, tool_name, query)
         return decision
 
@@ -153,6 +158,8 @@ class TriggerEngine:
         ip_signals: Any,
         fp_signals: Any,
         canary_hits: Any,
+        pii_signals: Any,
+        self_pii_leak: Any,
         tool: str,
         query: str,
         audit_outcome: str,
@@ -167,6 +174,8 @@ class TriggerEngine:
             ip_signals=ip_signals,
             fingerprint_signals=fp_signals,
             canary_hits=canary_hits,
+            pii_signals=pii_signals,
+            self_pii_leak=self_pii_leak,
             audit_ref=self.config.audit_log_path,
         )
         return TriggerDecision(
@@ -177,6 +186,8 @@ class TriggerEngine:
             ip_device_info=ip_signals,
             fingerprint_signals=fp_signals,
             canary_hits=canary_hits,
+            pii_signals=pii_signals,
+            self_pii_leak=self_pii_leak,
             should_block_research=True,
             message="Research blocked per privacy firewall. See audit log for details.",
             banner=banner,
@@ -191,6 +202,8 @@ class TriggerEngine:
         ip_signals: Any,
         fp_signals: Any,
         canary_hits: Any,
+        pii_signals: Any,
+        self_pii_leak: Any,
         tool: str,
         query: str,
     ) -> TriggerDecision:
@@ -205,6 +218,8 @@ class TriggerEngine:
             ip_signals=ip_signals,
             fingerprint_signals=fp_signals,
             canary_hits=canary_hits,
+            pii_signals=pii_signals,
+            self_pii_leak=self_pii_leak,
             audit_ref=self.config.audit_log_path,
         )
         return TriggerDecision(
@@ -215,6 +230,8 @@ class TriggerEngine:
             ip_device_info=ip_signals,
             fingerprint_signals=fp_signals,
             canary_hits=canary_hits,
+            pii_signals=pii_signals,
+            self_pii_leak=self_pii_leak,
             should_block_research=False,
             message="Borderline self-targeted query. Logged for review.",
             banner=banner,
@@ -229,6 +246,8 @@ class TriggerEngine:
         ip_signals: Any,
         fp_signals: Any,
         canary_hits: Any,
+        pii_signals: Any,
+        self_pii_leak: Any,
         tool: str,
         query: str,
     ) -> TriggerDecision:
@@ -243,6 +262,8 @@ class TriggerEngine:
             ip_signals=ip_signals,
             fingerprint_signals=fp_signals,
             canary_hits=canary_hits,
+            pii_signals=pii_signals,
+            self_pii_leak=self_pii_leak,
             audit_ref=self.config.audit_log_path,
         )
         return TriggerDecision(
@@ -253,6 +274,8 @@ class TriggerEngine:
             ip_device_info=ip_signals,
             fingerprint_signals=fp_signals,
             canary_hits=canary_hits,
+            pii_signals=pii_signals,
+            self_pii_leak=self_pii_leak,
             should_block_research=False,
             message="Light self-targeted lookup logged.",
             banner=banner,
@@ -267,37 +290,58 @@ class TriggerEngine:
         ip_signals: Any,
         fp_signals: Any,
         canary_hits: Any,
+        pii_signals: Any,
+        self_pii_leak: Any,
         tool: str,
         query: str,
     ) -> TriggerDecision:
-        level = "None" if not canary_hits else "Level 1 - Canary"
+        # Pick the strongest reason for the alert (self-PII leak beats
+        # canary beats silent). Operator's own PII appearing in scraped
+        # results is the loudest signal here.
+        if self_pii_leak:
+            level = "Level 1 - Self PII Leak"
+            reason = "Operator PII appeared in scraped results"
+            outcome = "SELF PII LEAK - NON-SELF QUERY"
+        elif canary_hits:
+            level = "Level 1 - Canary"
+            reason = "Canary token or OSINT tool reference detected"
+            outcome = "CANARY HIT - NON-SELF"
+        else:
+            level = "None"
+            reason = "Non-self query"
+            outcome = "ALLOWED"
+
         banner = ""
-        if canary_hits:
+        if self_pii_leak or canary_hits:
             banner = format_banner(
                 level=level,
                 tool=tool,
                 query=query,
-                reason="Canary token or OSINT tool reference detected",
+                reason=reason,
                 intent="light_lookup",
                 action="ALLOWED",
                 ip_signals=ip_signals,
                 fingerprint_signals=fp_signals,
                 canary_hits=canary_hits,
+                pii_signals=pii_signals,
+                self_pii_leak=self_pii_leak,
                 audit_ref=self.config.audit_log_path,
             )
         return TriggerDecision(
             action="ALLOW",
             alert_level=level,
             intent_classification="light_lookup",
-            reason="Non-self query" + (" with canary hit" if canary_hits else ""),
+            reason=reason,
             ip_device_info=ip_signals,
             fingerprint_signals=fp_signals,
             canary_hits=canary_hits,
+            pii_signals=pii_signals,
+            self_pii_leak=self_pii_leak,
             should_block_research=False,
             message="",
             banner=banner,
             timestamp=timestamp,
-            audit_outcome="CANARY HIT - NON-SELF" if canary_hits else "ALLOWED",
+            audit_outcome=outcome,
         )
 
     def _write_audit(self, decision: TriggerDecision, tool: str, query: str) -> None:

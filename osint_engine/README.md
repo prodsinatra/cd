@@ -32,14 +32,24 @@ The default identifiers are placeholders. Provide a config file:
 {
   "self_identifiers": ["jdoe", "808szn", "my-business-llc"],
   "self_context_pairs": [["brooklyn", "music producer"]],
+  "self_addresses": ["123 Main St", "11215"],
+  "self_emails": ["me@example.com"],
+  "self_phones": ["(347) 555-1212"],
   "audit_log_path": "/path/you/control/osint_audit.md",
   "deep_threshold": 2,
   "borderline_threshold": 1
 }
 ```
 
-`self_context_pairs` matches only when **both** halves appear in the same
-query/context — useful when a single token is too common on its own.
+- `self_identifiers` — any string here makes a query self-targeted.
+- `self_context_pairs` — both halves of a pair must appear together,
+  useful when a single token is too common on its own.
+- `self_addresses` / `self_emails` / `self_phones` — also count as
+  self-identifiers **and** are watched for in upstream tool output, so
+  the engine fires `Level 1 - Self PII Leak` when any of them surfaces
+  in scraped results — even on queries that don't mention you. Phone
+  matching is digit-normalized: `"(347) 555-1212"` will match a result
+  that says `3475551212`.
 
 ## Use programmatically
 
@@ -80,8 +90,25 @@ pipelines and CI gates.
 | Self-identifier + 2+ deep-intent markers               | `BLOCK`             | Level 2                 |
 | Self-identifier + 1 deep marker, no light marker       | `ALLOW_WITH_WARNING`| Level 1 - Borderline    |
 | Self-identifier + light lookup                         | `ALLOW`             | Level 1                 |
-| No self-identifier, no canary hit                      | `ALLOW` (silent)    | None                    |
+| Non-self query, but operator PII leaked in results     | `ALLOW`             | Level 1 - Self PII Leak |
 | Non-self query, but canary/OSINT-tool string present   | `ALLOW`             | Level 1 - Canary        |
+| No self-identifier, no canary, no leak                 | `ALLOW` (silent)    | None                    |
+
+`Self PII Leak` outranks `Canary` when both fire — operator PII surfacing
+in scraped results is the loudest signal.
+
+## What gets extracted from upstream results
+
+Every evaluation runs the full extractor suite over `previous_results`:
+
+- **IP / device** — IPv4, full-form IPv6
+- **Fingerprint** — Canvas/WebGL, AudioContext, fonts, User-Agent, JA3/JA4, behavioral
+- **PII** — street addresses, context-anchored postal codes, emails, NANP phones, lat/lng pairs, MAC addresses
+- **Canary** — honeytoken / OSINT-tool name references
+- **Self PII leak** — operator-configured address/email/phone substrings (phone matching ignores formatting)
+
+All findings are attached to the `TriggerDecision` and shown in the alert
+banner when present.
 
 ## Protective OSINT sweep
 
@@ -116,5 +143,6 @@ pip install pytest
 python -m pytest tests/ -q
 ```
 
-43 tests cover the firewall stages, extractors, canary detection, audit
-writing, the protective workflow, and the module wrapper.
+71 tests cover the firewall stages, IP/fingerprint/PII extractors, canary
+detection, the self-PII-leak path, audit writing, the protective workflow,
+and the module wrapper.

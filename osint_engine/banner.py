@@ -20,6 +20,8 @@ def format_banner(
     ip_signals: Any,
     fingerprint_signals: Any,
     canary_hits: Any = None,
+    pii_signals: Any = None,
+    self_pii_leak: Any = None,
     audit_ref: str | None = None,
 ) -> str:
     lines = [
@@ -33,6 +35,10 @@ def format_banner(
         f"IP/Device signals: {_render(ip_signals)}",
         f"Fingerprint signals: {_render(fingerprint_signals)}",
     ]
+    if pii_signals and not isinstance(pii_signals, str):
+        lines.append(f"PII signals in results: {_render(pii_signals)}")
+    if self_pii_leak:
+        lines.append(f"Operator PII leak detected: {_render(self_pii_leak)}")
     if canary_hits:
         lines.append(f"Canary/OSINT-tool hits: {_render(canary_hits)}")
     if audit_ref:

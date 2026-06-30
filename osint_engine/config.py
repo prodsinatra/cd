@@ -42,15 +42,41 @@ class EngineConfig:
         ]
     )
     self_context_pairs: list[tuple[str, str]] = field(default_factory=list)
+    self_addresses: list[str] = field(default_factory=list)
+    self_emails: list[str] = field(default_factory=list)
+    self_phones: list[str] = field(default_factory=list)
     audit_log_path: str = DEFAULT_AUDIT_LOG_PATH
     deep_threshold: int = 2
     borderline_threshold: int = 1
 
     def normalized_identifiers(self) -> list[str]:
-        return [i.lower() for i in self.self_identifiers if i]
+        """All self-marker strings (identifiers + addresses + emails + phones).
+
+        Used by the firewall to decide whether a query targets the operator.
+        Phones are normalized to digits only so "(347) 555-1212" matches
+        "3475551212" — search engines drop separators.
+        """
+        bag: list[str] = []
+        for source in (
+            self.self_identifiers,
+            self.self_addresses,
+            self.self_emails,
+        ):
+            bag.extend(i.lower() for i in source if i)
+        for phone in self.self_phones:
+            if phone:
+                bag.append(phone.lower())
+                digits = _digits_only(phone)
+                if digits:
+                    bag.append(digits)
+        return bag
 
     def normalized_context_pairs(self) -> list[tuple[str, str]]:
         return [(a.lower(), b.lower()) for a, b in self_context_pairs_iter(self.self_context_pairs)]
+
+
+def _digits_only(s: str) -> str:
+    return "".join(ch for ch in s if ch.isdigit())
 
 
 def self_context_pairs_iter(pairs: Iterable) -> Iterable[tuple[str, str]]:
@@ -65,6 +91,9 @@ def load_config(path: str | Path) -> EngineConfig:
     return EngineConfig(
         self_identifiers=raw.get("self_identifiers", []),
         self_context_pairs=[tuple(p) for p in raw.get("self_context_pairs", [])],
+        self_addresses=raw.get("self_addresses", []),
+        self_emails=raw.get("self_emails", []),
+        self_phones=raw.get("self_phones", []),
         audit_log_path=raw.get("audit_log_path", DEFAULT_AUDIT_LOG_PATH),
         deep_threshold=raw.get("deep_threshold", 2),
         borderline_threshold=raw.get("borderline_threshold", 1),

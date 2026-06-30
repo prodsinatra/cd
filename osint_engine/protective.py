@@ -34,6 +34,8 @@ class SelfExposureReport:
     fingerprint_signals: list[dict] = field(default_factory=list)
     ip_signals: list[dict] = field(default_factory=list)
     canary_hits: list[dict] = field(default_factory=list)
+    pii_signals: list[dict] = field(default_factory=list)
+    self_pii_leaks: list[dict] = field(default_factory=list)
     recommendations: list[str] = field(default_factory=list)
 
     def add_finding(self, label: str, decision: TriggerDecision, raw: str) -> None:
@@ -53,6 +55,10 @@ class SelfExposureReport:
             self.ip_signals.append({label: decision.ip_device_info})
         if decision.canary_hits:
             self.canary_hits.append({label: decision.canary_hits})
+        if decision.pii_signals and not isinstance(decision.pii_signals, str):
+            self.pii_signals.append({label: decision.pii_signals})
+        if decision.self_pii_leak:
+            self.self_pii_leaks.append({label: decision.self_pii_leak})
 
 
 def run_protective_osint(
@@ -85,6 +91,19 @@ def run_protective_osint(
 
 def _derive_recommendations(report: SelfExposureReport) -> list[str]:
     recs: list[str] = []
+    if report.self_pii_leaks:
+        recs.append(
+            "Configured operator PII (address/email/phone) appeared in "
+            "scraped results — request removal from the source, file data "
+            "broker opt-outs, and rotate the affected contact channel if "
+            "feasible."
+        )
+    if report.pii_signals:
+        recs.append(
+            "Third-party PII (addresses, emails, phones, geo coords, MAC "
+            "addresses) was found in scraped results — narrow the scope so "
+            "you are not inadvertently collecting other people's PII."
+        )
     if report.fingerprint_signals:
         recs.append(
             "Browser/device fingerprint signals appeared in scraped results — "
