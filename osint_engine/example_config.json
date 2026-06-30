@@ -1,0 +1,23 @@
+{
+  "self_identifiers": [
+    "<OPERATOR_NAME_PLACEHOLDER>",
+    "<OPERATOR_HANDLE_PLACEHOLDER>",
+    "<OPERATOR_BUSINESS_PLACEHOLDER>"
+  ],
+  "self_context_pairs": [
+    ["<CITY_PLACEHOLDER>", "<ROLE_PLACEHOLDER>"]
+  ],
+  "self_addresses": [
+    "<STREET_ADDRESS_PLACEHOLDER>",
+    "<POSTAL_CODE_PLACEHOLDER>"
+  ],
+  "self_emails": [
+    "<EMAIL_PLACEHOLDER>"
+  ],
+  "self_phones": [
+    "<PHONE_PLACEHOLDER>"
+  ],
+  "audit_log_path": "artifacts/OSINT_audit_log.md",
+  "deep_threshold": 2,
+  "borderline_threshold": 1
+}
