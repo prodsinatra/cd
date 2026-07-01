@@ -1,0 +1,8 @@
+{
+  "self_identifiers": ["<full name variations>", "<handles/aliases>", "<brand or business name>"],
+  "self_context_pairs": [["<city or region>", "<role or profession>"]],
+  "self_addresses": ["<street address>"],
+  "self_emails": ["<email>"],
+  "self_phones": ["<phone number>"],
+  "audit_log_path": "artifacts/OSINT_audit_log_user.md"
+}

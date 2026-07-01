@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+artifacts/
+
+# OsintBURGER operator identifiers/audit log — never commit real PII
+.claude/skills/osint-burger/operator.local.json
